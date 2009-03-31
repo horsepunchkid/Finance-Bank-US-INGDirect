@@ -97,14 +97,35 @@ sub _login {
 
     $response = $self->{ua}->get("$base/INGDirect.html?command=viewAccountPostLogin&fill=&userType=Client");
     $response->is_success or die "Final login failed.";
-    # Parse $response->content for current account status
+    $self->{_account_screen} = $response->content;
+}
+
+sub accounts {
+    my ($self) = @_;
+
+    use HTML::Strip;
+    my $hs = HTML::Strip->new;
+    my @lines = grep /command=goToAccount/, split(/[\n\r]/, $self->{_account_screen});
+    @lines = split(/\n/, $hs->parse(join "\n", @lines));
+
+    my %accounts;
+    for (@lines) {
+        my @data = splice(@lines, 0, 3);
+        my %account;
+        ($account{type} = $data[0]) =~ s/^\s*(.*?)\s*$/$1/;
+        ($account{nickname}, $account{number}, $account{balance}) = split /\s/, $data[1];
+        ($account{available} = $data[2]) =~ s/^\s*(.*?)\s*$/$1/;
+        $accounts{$account{number}} = \%account;
+    }
+
+    return %accounts;
 }
 
 sub last_month_qfx {
     my ($self) = @_;
 
     my $response = $self->{ua}->post("$base/download.qfx", [
-        QFX => 'QFX',
+        OFX => 'OFX',
         account => 'ALL',
         nickname => '',
         description => '',
@@ -117,7 +138,7 @@ sub last_month_qfx {
         EXPDAY => '',
         EXPYEAR => '',
     ]);
-    $response->is_success or die "QFX download failed.";
+    $response->is_success or die "OFX download failed.";
     return $response->content;
 }
 
