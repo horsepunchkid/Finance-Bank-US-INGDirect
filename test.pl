@@ -20,13 +20,13 @@ my $ing = Finance::Bank::US::INGDirect->new(%config);
 use Finance::OFX::Parse::Simple;
 
 my $parser = Finance::OFX::Parse::Simple->new;
-my @txs = @{$parser->parse_scalar($ing->last_month_qfx)};
+my @txs = @{$parser->parse_scalar($ing->recent_transactions)};
 my %accounts = $ing->accounts;
 
 for (@txs) {
     my $account = $accounts{$_->{account_id}};
     if($account) {
-        print "$account->{type}: $account->{nickname} - \$$account->{balance}\n";
+        print "$account->{type}: $account->{nickname} ($account->{number}) - \$$account->{balance}\n";
     }
     else {
         print "Account: $_->{account_id}\n";

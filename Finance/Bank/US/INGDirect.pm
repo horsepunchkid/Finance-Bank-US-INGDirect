@@ -2,8 +2,10 @@ package Finance::Bank::US::INGDirect;
 
 use strict;
 
+use Carp 'croak';
 use LWP::UserAgent;
 use HTTP::Cookies;
+use Date::Parse;
 use Data::Dumper;
 
 my $base = 'https://secure.ingdirect.com/myaccount';
@@ -28,10 +30,10 @@ sub _login {
         command => 'customerIdentify',
         AuthenticationType => 'Primary',
     ]);
-    $response->is_redirect or die "Initial login failed.";
+    $response->is_redirect or croak "Initial login failed.";
 
     $response = $self->{ua}->get("$base/INGDirect.html?command=displayCustomerAuthenticate&fill=&userType=Client");
-    $response->is_success or die "Retrieving challenge questions failed.";
+    $response->is_success or croak "Retrieving challenge questions failed.";
     # <input value="########" name="DeviceId" type="hidden">
 
     # Dig around for challenge questions
@@ -45,10 +47,10 @@ sub _login {
         DeviceToken => $self->{ua}{cookie_jar}{COOKIES}{'.ingdirect.com'}{'/'}{'PMData'}[1],
         @{$self->{questions}},
     ]);
-    $response->is_redirect or die "Submitting challenge responses failed.";
+    $response->is_redirect or croak "Submitting challenge responses failed.";
 
     $response = $self->{ua}->get("$base/INGDirect.html?command=displayCustomerAuthenticate&fill=&userType=Client");
-    $response->is_success or die "Loading PIN form failed.";
+    $response->is_success or croak "Loading PIN form failed.";
 
     my @keypad = map { s/^.*addClick\('([A-Z]\.gif)\'.*$/$1/; $_ }
         grep /<img onmouseup="return addClick/,
@@ -64,10 +66,10 @@ sub _login {
         PIN => '****', # Literally what is submitted and required
         hc => '|'. join '|', map { $keypad[$_] } split//, $self->{pin},
     ]);
-    $response->is_redirect or die "Submitting PIN failed.";
+    $response->is_redirect or croak "Submitting PIN failed.";
 
     $response = $self->{ua}->get("$base/INGDirect.html?command=viewAccountPostLogin&fill=&userType=Client");
-    $response->is_success or die "Final login failed.";
+    $response->is_success or croak "Final login failed.";
     $self->{_account_screen} = $response->content;
 }
 
@@ -83,34 +85,56 @@ sub accounts {
     for (@lines) {
         my @data = splice(@lines, 0, 3);
         my %account;
-        ($account{type} = $data[0]) =~ s/^\s*(.*?)\s*$/$1/;
+        ($account{type} = $data[0]) =~ s/^\s*(.*) \xa0\xa0/$1/;
         ($account{nickname}, $account{number}, $account{balance}) = split /\s/, $data[1];
         ($account{available} = $data[2]) =~ s/^\s*(.*?)\s*$/$1/;
         $accounts{$account{number}} = \%account;
     }
 
-    return %accounts;
+    %accounts;
 }
 
-sub last_month_qfx {
-    my ($self) = @_;
+sub recent_transactions {
+    my ($self, $account, $days) = @_;
+
+    $account ||= 'ALL';
+    $days ||= 30;
 
     my $response = $self->{ua}->post("$base/download.qfx", [
         OFX => 'OFX',
-        account => 'ALL',
-        nickname => '',
-        description => '',
         TIMEFRAME => 'STANDARD',
-        FREQ => '30',
-        RECMONTH => '0',
-        RECDAY => '1',
-        RECYEAR => '2000',
-        EXPMONTH => '',
-        EXPDAY => '',
-        EXPYEAR => '',
+        account => $account,
+        FREQ => $days,
     ]);
-    $response->is_success or die "OFX download failed.";
-    return $response->content;
+    $response->is_success or croak "OFX download failed.";
+
+    $response->content;
+}
+
+sub transactions { # FIXME: Seems unable to retrieve anything
+    my ($self, $account, $from, $to) = @_;
+
+    $account ||= 'ALL';
+    $from ||= '2000-01-01';
+    $to ||= '2038-01-01';
+
+    my @from = strptime($from);
+    my @to = strptime($to);
+
+    my $response = $self->{ua}->post("$base/download.qfx", [
+        OFX => 'OFX',
+        TIMEFRAME => 'VARIABLE',
+        account => $account,
+        RECDAY   => $from[3],
+        RECMONTH => $from[4],
+        RECYEAR  => $from[5],
+        EXPMONTH => $to[3],
+        EXPDAY   => $to[4],
+        EXPYEAR  => $to[5],
+    ]);
+    $response->is_success or croak "OFX download failed.";
+
+    $response->content;
 }
 
 1;
