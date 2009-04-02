@@ -79,13 +79,13 @@ sub accounts {
     use HTML::Strip;
     my $hs = HTML::Strip->new;
     my @lines = grep /command=goToAccount/, split(/[\n\r]/, $self->{_account_screen});
-    @lines = split(/\n/, $hs->parse(join "\n", @lines));
+    @lines = map { tr/\xa0/ /; $_ } split(/\n/, $hs->parse(join "\n", @lines));
 
     my %accounts;
     for (@lines) {
         my @data = splice(@lines, 0, 3);
         my %account;
-        ($account{type} = $data[0]) =~ s/^\s*(.*) \xa0\xa0/$1/;
+        ($account{type} = $data[0]) =~ s/^\s*(.*?)\s*$/$1/;
         ($account{nickname}, $account{number}, $account{balance}) = split /\s/, $data[1];
         ($account{available} = $data[2]) =~ s/^\s*(.*?)\s*$/$1/;
         $accounts{$account{number}} = \%account;
