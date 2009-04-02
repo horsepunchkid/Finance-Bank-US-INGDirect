@@ -26,16 +26,7 @@ sub _login {
     $response = $self->{ua}->post("$base/InitialINGDirect.html", [
         ACN => $self->{saver_id},
         command => 'customerIdentify',
-        Locale => 'en_US',
-        Device => 'web',
-        UserType => 'Client',
         AuthenticationType => 'Primary',
-        ApplicationType => 'ViewAccount',
-        fp_browser => 'perl',
-        fp_screen => 'big',
-        fp_software => 'linux',
-        from => 'PreviousPage',
-        pageType => 'primary',
     ]);
     $response->is_redirect or die "Initial login failed.";
 
@@ -47,21 +38,10 @@ sub _login {
     #print grep /AnswerQ/, split('\n', $response->content) and exit;
 
     $response = $self->{ua}->post("$base/INGDirect.html", [
-        command => 'customerAuthenticate',
-        Locale => 'en_US',
-        Device => 'web',
-        UserType => 'Client',
-        AuthenState => 'CONTINUE',
-        AuthenticationType => 'Primary',
-        ApplicationType => 'ViewAccount',
-        QuestionHelpFlag => 'false',
-        LoginStep => 'UnregisteredComputerChallengeQuestion',
-        AlternateQuestionsSource => 'empty',
-        isacif => 'true',
-        'YES%2C+I+WANT+TO+CONTINUE.' => 'true',
-        TLSearchNum => $self->{customer},
         ACN => $self->{saver_id},
-        DeviceId => '', # Apparently unnecessary
+        command => 'customerAuthenticate',
+        LoginStep => 'UnregisteredComputerChallengeQuestion',
+        TLSearchNum => $self->{customer},
         DeviceToken => $self->{ua}{cookie_jar}{COOKIES}{'.ingdirect.com'}{'/'}{'PMData'}[1],
         @{$self->{questions}},
     ]);
@@ -77,20 +57,11 @@ sub _login {
     unshift(@keypad, pop @keypad);
 
     $response = $self->{ua}->post("$base/INGDirect.html", [
-        command => 'customerAuthenticate',
-        Locale => 'en_US',
-        Device => 'web',
-        UserType => 'Client',
-        AuthenState => 'CONTINUE',
-        AuthenticationType => 'Primary',
-        ApplicationType => 'ViewAccount',
-        QuestionHelpFlag => 'false',
-        LoginStep => 'UnregisteredComputerPIN',
-        AlternateQuestionsSource => 'empty',
-        isacif => 'true',
-        TLSearchNum => $self->{customer},
         ACN => $self->{saver_id},
-        PIN => '****', # Literally what is submitted
+        command => 'customerAuthenticate',
+        LoginStep => 'UnregisteredComputerPIN',
+        TLSearchNum => $self->{customer},
+        PIN => '****', # Literally what is submitted and required
         hc => '|'. join '|', map { $keypad[$_] } split//, $self->{pin},
     ]);
     $response->is_redirect or die "Submitting PIN failed.";
