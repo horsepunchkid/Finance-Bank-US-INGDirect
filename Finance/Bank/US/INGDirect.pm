@@ -121,6 +121,11 @@ sub transactions { # FIXME: Seems unable to retrieve anything
     my @from = strptime($from);
     my @to = strptime($to);
 
+    $from[4]++;
+    $to[4]++;
+    $from[5] += 1900;
+    $to[5] += 1900;
+
     my $response = $self->{ua}->post("$base/download.qfx", [
         OFX => 'OFX',
         TIMEFRAME => 'VARIABLE',
