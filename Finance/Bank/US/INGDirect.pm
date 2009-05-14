@@ -8,7 +8,61 @@ use HTTP::Cookies;
 use Date::Parse;
 use Data::Dumper;
 
+our $VERSION = 0.0.1;
+
+=pod
+
+=head1 NAME
+
+Finance::Bank::US::INGDirect - Check balances and transactions for US INGDirect accounts
+
+=head1 SYNOPSIS
+
+  use Finance::Bank::US::INGDirect;
+  use Finance::OFX::Parse::Simple;
+
+  my $ing = Finance::Bank::US::INGDirect->new(
+      saver_id => '...',
+      customer => '########',
+      questions => [
+          # Your questions may differ; examine the form to find them
+          'AnswerQ1.4' => '...', # In what year was your mother born?
+          'AnswerQ1.5' => '...', # In what year was your father born?
+          'AnswerQ1.8' => '...', # What is the name of your hometown newspaper?
+      ],
+      pin => '########',
+  );
+
+  my $parser = Finance::OFX::Parse::Simple->new;
+  my @txs = @{$parser->parse_scalar($ing->recent_transactions)};
+  my %accounts = $ing->accounts;
+
+  for (@txs) {
+      print "Account: $_->{account_id}\n";
+      printf "%s %-50s %8.2f\n", $_->{date}, $_->{name}, $_->{amount} for @{$_->{transactions}};
+      print "\n";
+  }
+
+=head1 DESCRIPTION
+
+This module provides methods to access data from US INGdirect accounts,
+including account balances and recent transactions in OFX format (see
+Finance::OFX and related modules).
+
+=cut
+
 my $base = 'https://secure.ingdirect.com/myaccount';
+
+=pod
+
+=head1 METHODS
+
+=head2 new( saver_id => '...', customer => '...', questions => [...], pin => '...' )
+
+Return an object that can be used to retrieve account balances and statements.
+See USAGE for examples of challenge questions.
+
+=cut
 
 sub new {
     my ($class, %opts) = @_;
@@ -73,6 +127,19 @@ sub _login {
     $self->{_account_screen} = $response->content;
 }
 
+=pod
+
+=head2 accounts( )
+
+Retrieve a list of accounts:
+
+  ( '####' => [ number => '####', type => 'Orange Savings', nickname => '...',
+                available => ###.##, balance => ###.## ],
+    ...
+  )
+
+=cut
+
 sub accounts {
     my ($self) = @_;
 
@@ -94,6 +161,15 @@ sub accounts {
     %accounts;
 }
 
+=pod
+
+=head2 recent_transactions( $account, $days )
+
+Retrieve a list of transactions in OFX format for the given account
+(default: all accounts) for the past number of days (default: 30).
+
+=cut
+
 sub recent_transactions {
     my ($self, $account, $days) = @_;
 
@@ -111,7 +187,17 @@ sub recent_transactions {
     $response->content;
 }
 
-sub transactions { # FIXME: Seems unable to retrieve anything
+=pod
+
+=head2 transactions( $account, $from, $to )
+
+Retrieve a list of transactions in OFX format for the given account
+(default: all accounts) in the given time frame (default: pretty far in the
+past to pretty far in the future).
+
+=cut
+
+sub transactions {
     my ($self, $account, $from, $to) = @_;
 
     $account ||= 'ALL';
@@ -143,4 +229,22 @@ sub transactions { # FIXME: Seems unable to retrieve anything
 }
 
 1;
+
+=pod
+
+=head1 AUTHOR
+
+This version by Steven N. Severinghaus <sns@severinghaus.org>
+
+=head1 COPYRIGHT
+
+Copyright (c) 2009 Steven N. Severinghaus. All rights reserved. This
+program is free software; you can redistribute it and/or modify it under
+the same terms as Perl itself.
+
+=head1 SEE ALSO
+
+Finance::Bank::INGDirect, Finance::OFX::Parse::Simple
+
+=cut
 
