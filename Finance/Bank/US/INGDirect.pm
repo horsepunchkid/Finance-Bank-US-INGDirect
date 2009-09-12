@@ -24,12 +24,12 @@ Finance::Bank::US::INGDirect - Check balances and transactions for US INGDirect 
   my $ing = Finance::Bank::US::INGDirect->new(
       saver_id => '...',
       customer => '########',
-      questions => [
+      questions => {
           # Your questions may differ; examine the form to find them
           'AnswerQ1.4' => '...', # In what year was your mother born?
           'AnswerQ1.5' => '...', # In what year was your father born?
           'AnswerQ1.8' => '...', # What is the name of your hometown newspaper?
-      ],
+      },
       pin => '########',
   );
 
@@ -77,52 +77,43 @@ sub new {
 sub _login {
     my ($self) = @_;
 
-    my $response = $self->{ua}->get("$base/InitialINGDirect.html?command=displayLogin&locale=en_US&userType=Client&action=1");
+    my $response = $self->{ua}->get("$base/INGDirect/login.vm");
 
-    $response = $self->{ua}->post("$base/InitialINGDirect.html", [
-        ACN => $self->{saver_id},
-        command => 'customerIdentify',
-        AuthenticationType => 'Primary',
+    $response = $self->{ua}->post("$base/INGDirect/login.vm", [
+        publicUserId => $self->{saver_id},
     ]);
     $response->is_redirect or croak "Initial login failed.";
 
-    $response = $self->{ua}->get("$base/INGDirect.html?command=displayCustomerAuthenticate&fill=&userType=Client");
+    $response = $self->{ua}->get("$base/INGDirect/security_questions.vm");
     $response->is_success or croak "Retrieving challenge questions failed.";
-    # <input value="########" name="DeviceId" type="hidden">
 
-    # Dig around for challenge questions
-    #print grep /AnswerQ/, split('\n', $response->content) and exit;
+    my @questions = map { s/^.*(AnswerQ.*)span".*$/$1/; $_ } grep /AnswerQ/, split('\n', $response->content);
+    croak "Didn't understand questions." if @questions != 2;
 
-    $response = $self->{ua}->post("$base/INGDirect.html", [
-        ACN => $self->{saver_id},
-        command => 'customerAuthenticate',
-        LoginStep => 'UnregisteredComputerChallengeQuestion',
+    $response = $self->{ua}->post("$base/INGDirect/security_questions.vm", [
         TLSearchNum => $self->{customer},
-        DeviceToken => $self->{ua}{cookie_jar}{COOKIES}{'.ingdirect.com'}{'/'}{'PMData'}[1],
-        @{$self->{questions}},
+        'customerAuthenticationResponse.questionAnswer[0].answerText' => $self->{questions}{$questions[0]},
+        'customerAuthenticationResponse.questionAnswer[1].answerText' => $self->{questions}{$questions[1]},
+        '_customerAuthenticationResponse.device[0].bind' => 'false',
     ]);
     $response->is_redirect or croak "Submitting challenge responses failed.";
 
-    $response = $self->{ua}->get("$base/INGDirect.html?command=displayCustomerAuthenticate&fill=&userType=Client");
+    $response = $self->{ua}->get("$base/INGDirect/login_pinpad.vm");
     $response->is_success or croak "Loading PIN form failed.";
 
-    my @keypad = map { s/^.*addClick\('([A-Z]\.gif)\'.*$/$1/; $_ }
-        grep /<img onmouseup="return addClick/,
+    my @keypad = map { s/^.*mouseUpKb\('([A-Z])'.*$/$1/; $_ }
+        grep /onMouseUp="return mouseUpKb/,
         split('\n', $response->content);
 
+    @keypad = map { shift @keypad; shift @keypad || () } @keypad;
     unshift(@keypad, pop @keypad);
 
-    $response = $self->{ua}->post("$base/INGDirect.html", [
-        ACN => $self->{saver_id},
-        command => 'customerAuthenticate',
-        LoginStep => 'UnregisteredComputerPIN',
-        TLSearchNum => $self->{customer},
-        PIN => '****', # Literally what is submitted and required
-        hc => '|'. join '|', map { $keypad[$_] } split//, $self->{pin},
+    $response = $self->{ua}->post("$base/INGDirect/login_pinpad.vm", [
+        'customerAuthenticationResponse.PIN' => join '', map { $keypad[$_] } split//, $self->{pin},
     ]);
     $response->is_redirect or croak "Submitting PIN failed.";
 
-    $response = $self->{ua}->get("$base/INGDirect.html?command=viewAccountPostLogin&fill=&userType=Client");
+    $response = $self->{ua}->get("$base/INGDirect.html?command=viewAccountPostLogin");
     $response->is_success or croak "Final login failed.";
     $self->{_account_screen} = $response->content;
 }
@@ -177,7 +168,7 @@ sub recent_transactions {
     $days ||= 30;
 
     my $response = $self->{ua}->post("$base/download.qfx", [
-        OFX => 'OFX',
+        type => 'OFX',
         TIMEFRAME => 'STANDARD',
         account => $account,
         FREQ => $days,
@@ -213,15 +204,11 @@ sub transactions {
     $to[5] += 1900;
 
     my $response = $self->{ua}->post("$base/download.qfx", [
-        OFX => 'OFX',
+        type => 'OFX',
         TIMEFRAME => 'VARIABLE',
         account => $account,
-        RECDAY   => $from[3],
-        RECMONTH => $from[4],
-        RECYEAR  => $from[5],
-        EXPMONTH => $to[3],
-        EXPDAY   => $to[4],
-        EXPYEAR  => $to[5],
+        startDate => "$from[4]/$from[3]/$from[5]",
+        endDate   => "$to[4]/$to[3]/$to[5]",
     ]);
     $response->is_success or croak "OFX download failed.";
 

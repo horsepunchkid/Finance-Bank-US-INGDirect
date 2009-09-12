@@ -7,11 +7,11 @@ use Finance::Bank::US::INGDirect;
 my %config = (
     saver_id => '',
     customer => '',
-    questions => [
+    questions => {
         'AnswerQ1.4' => '', # In what year was your mother born?
         'AnswerQ1.5' => '', # In what year was your father born?
         'AnswerQ1.8' => '', # What is the name of your hometown newspaper?
-    ],
+    },
     pin => '',
 );
 
