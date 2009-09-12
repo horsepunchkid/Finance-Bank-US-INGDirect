@@ -8,13 +8,19 @@ use HTTP::Cookies;
 use Date::Parse;
 use Data::Dumper;
 
-our $VERSION = 0.0.2;
-
 =pod
 
 =head1 NAME
 
 Finance::Bank::US::INGDirect - Check balances and transactions for US INGDirect accounts
+
+=head1 VERSION
+
+Version 0.02
+
+=cut
+
+our $VERSION = '0.02';
 
 =head1 SYNOPSIS
 
