@@ -8,7 +8,7 @@ use HTTP::Cookies;
 use Date::Parse;
 use Data::Dumper;
 
-our $VERSION = 0.0.1;
+our $VERSION = 0.0.2;
 
 =pod
 
