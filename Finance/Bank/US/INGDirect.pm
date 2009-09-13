@@ -16,11 +16,11 @@ Finance::Bank::US::INGDirect - Check balances and transactions for US INGDirect 
 
 =head1 VERSION
 
-Version 0.02
+Version 0.03
 
 =cut
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 =head1 SYNOPSIS
 
@@ -53,7 +53,8 @@ our $VERSION = '0.02';
 
 This module provides methods to access data from US INGdirect accounts,
 including account balances and recent transactions in OFX format (see
-Finance::OFX and related modules).
+Finance::OFX and related modules). It also provides a method to transfer
+money from one account to another on a given date.
 
 =cut
 
@@ -66,7 +67,7 @@ my $base = 'https://secure.ingdirect.com/myaccount';
 =head2 new( saver_id => '...', customer => '...', questions => [...], pin => '...' )
 
 Return an object that can be used to retrieve account balances and statements.
-See USAGE for examples of challenge questions.
+See SYNOPSIS for examples of challenge questions.
 
 =cut
 
@@ -93,7 +94,9 @@ sub _login {
     $response = $self->{ua}->get("$base/INGDirect/security_questions.vm");
     $response->is_success or croak "Retrieving challenge questions failed.";
 
-    my @questions = map { s/^.*(AnswerQ.*)span".*$/$1/; $_ } grep /AnswerQ/, split('\n', $response->content);
+    my @questions = map { s/^.*(AnswerQ.*)span".*$/$1/; $_ }
+        grep /AnswerQ/,
+        split('\n', $response->content);
     croak "Didn't understand questions." if @questions != 2;
 
     $response = $self->{ua}->post("$base/INGDirect/security_questions.vm", [
@@ -219,6 +222,62 @@ sub transactions {
     $response->is_success or croak "OFX download failed.";
 
     $response->content;
+}
+
+=pod
+
+=head2 transfer( $from, $to, $amount, $when )
+
+Transfer money from one account number to another on the given date
+(default: immediately). Use at your own risk.
+
+=cut
+
+sub transfer {
+    my ($self, $from, $to, $amount, $when) = @_;
+    my $type = $when ? 'SCHEDULED' : 'NOW';
+
+    if($when) {
+        my @when = strptime($when);
+        $when[4]++;
+        $when[5] += 1900;
+        $when = sprintf("%02d/%02d/%d", $when[4], $when[3], $when[5]);
+    }
+
+    my $response = $self->{ua}->get("$base/INGDirect/money_transfer.vm");
+    my ($page_token) = map { s/^.*value="(.*?)".*$/$1/; $_ }
+        grep /<input.*name="pageToken"/,
+        split('\n', $response->content);
+
+    $response = $self->{ua}->post("$base/INGDirect/deposit_transfer_input.vm", [
+        pageToken => $page_token,
+        action => 'continue',
+        amount => $amount,
+        sourceAccountNumber => $from,
+        destinationAccountNumber => $to,
+        depositTransferType => $type,
+        $when ? (scheduleDate => $when) : (),
+    ]);
+    $response->is_redirect or croak "Transfer setup failed.";
+
+    $response = $self->{ua}->get("$base/INGDirect/deposit_transfer_validate.vm");
+    ($page_token) = map { s/^.*value="(.*?)".*$/$1/; $_ }
+        grep /<input.*name="pageToken"/,
+        split('\n', $response->content);
+
+    $response = $self->{ua}->post("$base/INGDirect/deposit_transfer_validate.vm", [
+        pageToken => $page_token,
+        action => 'submit',
+    ]);
+    $response->is_redirect or croak "Transfer validation failed. Check your account!";
+
+    $response = $self->{ua}->get("$base/INGDirect/deposit_transfer_confirmation.vm");
+    $response->is_success or croak "Transfer confirmation failed. Check your account!";
+    my ($confirmation) = map { s/^.*Number">(\d+)<.*$/$1/; $_ }
+        grep /<span.*id="confirmationNumber">/,
+        split('\n', $response->content);
+
+    $confirmation;
 }
 
 1;
