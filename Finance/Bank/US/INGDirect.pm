@@ -17,11 +17,11 @@ Finance::Bank::US::INGDirect - Check balances and transactions for US INGDirect 
 
 =head1 VERSION
 
-Version 0.04
+Version 0.05
 
 =cut
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 =head1 SYNOPSIS
 
