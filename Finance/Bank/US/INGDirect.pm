@@ -5,6 +5,7 @@ use strict;
 use Carp 'croak';
 use LWP::UserAgent;
 use HTTP::Cookies;
+use HTML::Strip;
 use Date::Parse;
 use Data::Dumper;
 
@@ -16,11 +17,11 @@ Finance::Bank::US::INGDirect - Check balances and transactions for US INGDirect 
 
 =head1 VERSION
 
-Version 0.03
+Version 0.04
 
 =cut
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 =head1 SYNOPSIS
 
@@ -64,7 +65,7 @@ my $base = 'https://secure.ingdirect.com/myaccount';
 
 =head1 METHODS
 
-=head2 new( saver_id => '...', customer => '...', questions => [...], pin => '...' )
+=head2 new( saver_id => '...', customer => '...', questions => {...}, pin => '...' )
 
 Return an object that can be used to retrieve account balances and statements.
 See SYNOPSIS for examples of challenge questions.
@@ -142,7 +143,6 @@ Retrieve a list of accounts:
 sub accounts {
     my ($self) = @_;
 
-    use HTML::Strip;
     my $hs = HTML::Strip->new;
     my @lines = grep /command=goToAccount/, split(/[\n\r]/, $self->{_account_screen});
     @lines = map { tr/\xa0/ /; $_ } split(/\n/, $hs->parse(join "\n", @lines));
@@ -215,8 +215,8 @@ sub transactions {
         type => 'OFX',
         TIMEFRAME => 'VARIABLE',
         account => $account,
-        startDate => "$from[4]/$from[3]/$from[5]",
-        endDate   => "$to[4]/$to[3]/$to[5]",
+        startDate => sprintf("%02d/%02d/%d", @from[4,3,5]),
+        endDate   => sprintf("%02d/%02d/%d", @to[4,3,5]),
     ]);
     $response->is_success or croak "OFX download failed.";
 
@@ -228,7 +228,8 @@ sub transactions {
 =head2 transfer( $from, $to, $amount, $when )
 
 Transfer money from one account number to another on the given date
-(default: immediately). Use at your own risk.
+(default: immediately). Returns the confirmation number. Use at your
+own risk.
 
 =cut
 
@@ -240,7 +241,7 @@ sub transfer {
         my @when = strptime($when);
         $when[4]++;
         $when[5] += 1900;
-        $when = sprintf("%02d/%02d/%d", $when[4], $when[3], $when[5]);
+        $when = sprintf("%02d/%02d/%d", @when[4,3,5]);
     }
 
     my $response = $self->{ua}->get("$base/INGDirect/money_transfer.vm");
@@ -285,7 +286,7 @@ sub transfer {
 
 =head1 AUTHOR
 
-This version by Steven N. Severinghaus <sns@severinghaus.org>
+This version by Steven N. Severinghaus <sns-perl@severinghaus.org>
 
 =head1 COPYRIGHT
 
