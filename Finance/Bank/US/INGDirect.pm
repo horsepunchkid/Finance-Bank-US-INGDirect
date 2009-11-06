@@ -110,11 +110,10 @@ sub _login {
     $response = $self->{ua}->get("$base/INGDirect/login_pinpad.vm");
     $response->is_success or croak "Loading PIN form failed.";
 
-    my @keypad = map { s/^.*mouseUpKb\('([A-Z])'.*$/$1/; $_ }
-        grep /onMouseUp="return mouseUpKb/,
+    my @keypad = map { s/^.*mouseUpKb\("([A-Z])".*$/$1/; $_ }
+        grep /pinKeyboard[A-Z]number/,
         split('\n', $response->content);
 
-    @keypad = map { shift @keypad; shift @keypad || () } @keypad;
     unshift(@keypad, pop @keypad);
 
     $response = $self->{ua}->post("$base/INGDirect/login_pinpad.vm", [
