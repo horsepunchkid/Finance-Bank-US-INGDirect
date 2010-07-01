@@ -5,7 +5,6 @@ use strict;
 use Carp 'croak';
 use LWP::UserAgent;
 use HTTP::Cookies;
-use HTML::Strip;
 use Date::Parse;
 use Data::Dumper;
 
@@ -17,11 +16,11 @@ Finance::Bank::US::INGDirect - Check balances and transactions for US INGDirect 
 
 =head1 VERSION
 
-Version 0.05
+Version 0.06
 
 =cut
 
-our $VERSION = '0.05';
+our $VERSION = '0.06_01';
 
 =head1 SYNOPSIS
 
@@ -143,17 +142,22 @@ Retrieve a list of accounts:
 sub accounts {
     my ($self) = @_;
 
-    my $hs = HTML::Strip->new;
-    my @lines = grep /command=goToAccount/, split(/[\n\r]/, $self->{_account_screen});
-    @lines = map { tr/\xa0/ /; $_ } split(/\n/, $hs->parse(join "\n", @lines));
+    # sometimes it is ok to use regular expressions to parse HTML
+    my @results = ();
+    while($self->{_account_screen}
+          =~ m{<a[^>]+class="[^"]*tabletext[^"]*"[^>]*>(.+?)</a>}gis) {
+      my $d = $1;
+      $d =~ s/\s{2,}//g;
+      push @results, $d;
+    }
 
     my %accounts;
-    for (@lines) {
-        my @data = splice(@lines, 0, 3);
+    while (@results) {
         my %account;
-        ($account{type} = $data[0]) =~ s/^\s*(.*?)\s*$/$1/;
-        ($account{nickname}, $account{number}, $account{balance}) = split /\s/, $data[1];
-        ($account{available} = $data[2]) =~ s/^\s*(.*?)\s*$/$1/;
+        ($account{type},
+         $account{nickname},
+         $account{balance},
+         $account{available}) = splice(@results, 0, 5);
         $accounts{$account{number}} = \%account;
     }
 
