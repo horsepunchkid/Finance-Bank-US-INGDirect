@@ -310,10 +310,11 @@ sub transfer {
 =head1 AUTHOR
 
 This version by Steven N. Severinghaus <sns-perl@severinghaus.org>
+with contributions by Robert Spier.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2009 Steven N. Severinghaus. All rights reserved. This
+Copyright (c) 2011 Steven N. Severinghaus. All rights reserved. This
 program is free software; you can redistribute it and/or modify it under
 the same terms as Perl itself.
 
