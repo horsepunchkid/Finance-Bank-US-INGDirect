@@ -1,0 +1,14 @@
+Revision history for Finance-Bank-US-INGDirect
+
+0.04    2009-09-28 14:38:33 -0500
+        Minor tweaks to docs and code; more requirements documented
+
+0.03    2009-09-27 14:10:13 -0500
+        New sub transfer; list requirements in Makefile.PL
+
+0.02    2009-09-12 17:12:49 -0500
+        Updated for ING's new authentication process.
+
+0.01    2009-04-01 23:28:04 -0500
+        First version released.
+
