@@ -1,5 +1,11 @@
 Revision history for Finance-Bank-US-INGDirect
 
+0.07    2011-05-12 15:05:53 -0400
+        Adaptations to new login process; improved scraping
+
+0.05    2009-11-06 13:02:54 -0600
+        Minor updates
+
 0.04    2009-09-28 14:38:33 -0500
         Minor tweaks to docs and code; more requirements documented
 
