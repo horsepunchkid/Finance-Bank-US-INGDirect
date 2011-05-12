@@ -5,6 +5,7 @@ use strict;
 use Carp 'croak';
 use LWP::UserAgent;
 use HTTP::Cookies;
+use HTML::TableExtract;
 use Date::Parse;
 use Data::Dumper;
 
@@ -20,7 +21,7 @@ Version 0.06
 
 =cut
 
-our $VERSION = '0.06_01';
+our $VERSION = '0.07_01';
 
 =head1 SYNOPSIS
 
@@ -142,22 +143,30 @@ Retrieve a list of accounts:
 sub accounts {
     my ($self) = @_;
 
-    # sometimes it is ok to use regular expressions to parse HTML
-    my @results = ();
-    while($self->{_account_screen}
-          =~ m{<a[^>]+class="[^"]*tabletext[^"]*"[^>]*>(.+?)</a>}gis) {
-      my $d = $1;
-      $d =~ s/\s{2,}//g;
-      push @results, $d;
-    }
+    my $te = HTML::TableExtract->new( 
+        attribs => { cellpadding => 0, cellspacing => 0 } 
+    );
+    my $account_screen = $self->{_account_screen};
+    $account_screen =~ s/&nbsp;/ /g; # &nbsp; makes TableExtract unhappy
+    $te->parse($account_screen);
 
     my %accounts;
-    while (@results) {
+    my $seen_header = 0;
+
+    $te->tables or croak "Can't extract accounts table.";
+
+    foreach my $row (($te->tables)[0]->rows) {
+        next unless $seen_header++;
+        foreach (@$row) {
+            s/^\s*//;  s/\s*$//; s/\n/ /g;
+        }
         my %account;
         ($account{type},
          $account{nickname},
+         $account{number},
          $account{balance},
-         $account{available}) = splice(@results, 0, 5);
+         $account{available}) = @$row;
+        next unless $account{type}; # don't include total row
         $accounts{$account{number}} = \%account;
     }
 

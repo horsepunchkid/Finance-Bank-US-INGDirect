@@ -16,7 +16,7 @@ WriteMakefile(
         'Date::Parse' => 0,
         'LWP::UserAgent' => 0,
         'HTTP::Cookies' => 0,
-        'HTML::Strip' => 0,
+        'HTML::TableExtract' => 0,
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => 'Finance-Bank-US-INGDirect-*' },
