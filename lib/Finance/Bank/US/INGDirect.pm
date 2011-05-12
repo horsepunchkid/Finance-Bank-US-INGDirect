@@ -90,7 +90,8 @@ sub _login {
     $response = $self->{ua}->post("$base/INGDirect/login.vm", [
         publicUserId => $self->{saver_id},
     ]);
-    $response->is_redirect or croak "Initial login failed.";
+    $response->is_redirect && $response->header('location') =~ /security_questions.vm/
+        or croak "Initial login failed.";
 
     $response = $self->{ua}->get("$base/INGDirect/security_questions.vm");
     $response->is_success or croak "Retrieving challenge questions failed.";
@@ -106,7 +107,8 @@ sub _login {
         'customerAuthenticationResponse.questionAnswer[1].answerText' => $self->{questions}{$questions[1]},
         '_customerAuthenticationResponse.device[0].bind' => 'false',
     ]);
-    $response->is_redirect or croak "Submitting challenge responses failed.";
+    $response->is_redirect && $response->header('location') =~ /login_pinpad.vm/
+        or croak "Submitting challenge responses failed.";
 
     $response = $self->{ua}->get("$base/INGDirect/login_pinpad.vm");
     $response->is_success or croak "Loading PIN form failed.";
@@ -120,10 +122,18 @@ sub _login {
     $response = $self->{ua}->post("$base/INGDirect/login_pinpad.vm", [
         'customerAuthenticationResponse.PIN' => join '', map { $keypad[$_] } split//, $self->{pin},
     ]);
-    $response->is_redirect or croak "Submitting PIN failed.";
+    $response->is_redirect && $response->header('location') =~ /postlogin/
+        or croak "Submitting PIN failed.";
 
-    $response = $self->{ua}->get("$base/INGDirect.html?command=viewAccountPostLogin");
-    $response->is_success or croak "Final login failed.";
+    $response = $self->{ua}->get("$base/INGDirect/postlogin");
+    # XXX This is how it behaves in my browser, but not with
+    # LWP::UserAgent, so we can apparently just skip this step...
+    #$response->is_redirect && $response->header('location') =~ /account_summary.vm/
+    #    or croak "Post login redirect failed.";
+
+    #$response = $self->{ua}->get("$base/INGDirect/account_summary.vm");
+    # XXX ...and the postlogin screen has the account summary.
+    $response->is_success or croak "Account summary fetch failed.";
     $self->{_account_screen} = $response->content;
 }
 
