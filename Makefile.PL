@@ -10,7 +10,11 @@ WriteMakefile(
     ($ExtUtils::MakeMaker::VERSION >= 6.3002
       ? ('LICENSE'=> 'perl')
       : ()),
-    PL_FILES            => {},
+    META_MERGE => {
+        resources => {
+            repository => 'https://github.com/horsepunchkid/Finance-Bank-US-INGDirect',
+        },
+    },
     PREREQ_PM => {
         'Test::More' => 0,
         'Date::Parse' => 0,
