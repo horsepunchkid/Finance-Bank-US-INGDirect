@@ -180,7 +180,7 @@ sub accounts {
       ($account{type}, $account{nickname}) = split / - /, shift @$row;
       ($account{number},
        $account{balance},
-       $account{available}) = map { s/^.+:\s+//; $_ ; } @$row;
+       $account{available}) = map { s/^.+:\s+//; s/,//g; $_ ; } @$row;
       next unless $account{type}; # don't include total row
       $accounts{$account{number}} = \%account
         if $account{number};
