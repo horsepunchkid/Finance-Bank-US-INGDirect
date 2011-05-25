@@ -166,18 +166,24 @@ sub accounts {
     $te->tables or croak "Can't extract accounts table.";
 
     foreach my $row (($te->tables)[0]->rows) {
-        next unless $seen_header++;
-        foreach (@$row) {
-            s/^\s*//;  s/\s*$//; s/\n/ /g;
-        }
-        my %account;
-        ($account{type},
-         $account{nickname},
-         $account{number},
-         $account{balance},
-         $account{available}) = @$row;
-        next unless $account{type}; # don't include total row
-        $accounts{$account{number}} = \%account;
+      if ($row->[0] =~ /Account Type/) {
+        $seen_header++;
+        next;
+      }
+      next unless $seen_header;
+
+      foreach (@$row) {
+        s/^\s*//;  s/\s*$//; s/[\n\r]/ /g; s/\s+/ /g;
+      }
+
+      my %account;
+      ($account{type}, $account{nickname}) = split / - /, shift @$row;
+      ($account{number},
+       $account{balance},
+       $account{available}) = map { s/^.+:\s+//; $_ ; } @$row;
+      next unless $account{type}; # don't include total row
+      $accounts{$account{number}} = \%account
+        if $account{number};
     }
 
     %accounts;
