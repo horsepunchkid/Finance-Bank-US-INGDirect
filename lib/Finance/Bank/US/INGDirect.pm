@@ -3,9 +3,10 @@ package Finance::Bank::US::INGDirect;
 use strict;
 
 use Carp 'croak';
-use LWP::UserAgent;
-use HTTP::Cookies;
-use HTML::TableExtract;
+use Finance::OFX;
+use Finance::OFX::Institution;
+use Finance::OFX::UserAgent;
+use Finance::OFX::Account;
 use Date::Parse;
 use Data::Dumper;
 
@@ -30,14 +31,7 @@ our $VERSION = '0.08';
 
   my $ing = Finance::Bank::US::INGDirect->new(
       saver_id => '...',
-      customer => '########',
-      questions => {
-          # Your questions may differ; examine the form to find them
-          'AnswerQ1.4' => '...', # In what year was your mother born?
-          'AnswerQ1.5' => '...', # In what year was your father born?
-          'AnswerQ1.8' => '...', # What is the name of your hometown newspaper?
-      },
-      pin => '########',
+      access_code => '...',
   );
 
   my $parser = Finance::OFX::Parse::Simple->new;
@@ -59,7 +53,7 @@ money from one account to another on a given date.
 
 =cut
 
-my $base = 'https://secure.ingdirect.com/myaccount';
+my $base = '';
 
 =pod
 
@@ -76,7 +70,11 @@ sub new {
     my ($class, %opts) = @_;
     my $self = bless \%opts, $class;
 
-    $self->{ua} ||= LWP::UserAgent->new(cookie_jar => HTTP::Cookies->new);
+    $self->{fi} = Finance::OFX::Institution->new(
+        ORG => 'ING DIRECT',
+        FID => '031176110',
+        URL => 'https://ofx.ingdirect.com/OFX/ofx.html',
+    );
 
     _login($self);
     $self;
@@ -85,56 +83,11 @@ sub new {
 sub _login {
     my ($self) = @_;
 
-    my $response = $self->{ua}->get("$base/INGDirect/login.vm");
-
-    $response = $self->{ua}->post("$base/INGDirect/login.vm", [
-        publicUserId => $self->{saver_id},
-    ]);
-    $response->is_redirect && $response->header('location') =~ /security_questions.vm/
-        or croak "Initial login failed.";
-
-    $response = $self->{ua}->get("$base/INGDirect/security_questions.vm");
-    $response->is_success or croak "Retrieving challenge questions failed.";
-
-    my @questions = map { s/^.*(AnswerQ.*)span".*$/$1/; $_ }
-        grep /AnswerQ/,
-        split('\n', $response->content);
-    croak "Didn't understand questions." if @questions != 2;
-
-    $response = $self->{ua}->post("$base/INGDirect/security_questions.vm", [
-        TLSearchNum => $self->{customer},
-        'customerAuthenticationResponse.questionAnswer[0].answerText' => $self->{questions}{$questions[0]},
-        'customerAuthenticationResponse.questionAnswer[1].answerText' => $self->{questions}{$questions[1]},
-        '_customerAuthenticationResponse.device[0].bind' => 'false',
-    ]);
-    $response->is_redirect && $response->header('location') =~ /login_pinpad.vm/
-        or croak "Submitting challenge responses failed.";
-
-    $response = $self->{ua}->get("$base/INGDirect/login_pinpad.vm");
-    $response->is_success or croak "Loading PIN form failed.";
-
-    my @keypad = map { s/^.*mouseUpKb\("([A-Z])".*$/$1/; $_ }
-        grep /pinKeyboard[A-Z]number/,
-        split('\n', $response->content);
-
-    unshift(@keypad, pop @keypad);
-
-    $response = $self->{ua}->post("$base/INGDirect/login_pinpad.vm", [
-        'customerAuthenticationResponse.PIN' => join '', map { $keypad[$_] } split//, $self->{pin},
-    ]);
-    $response->is_redirect && $response->header('location') =~ /postlogin/
-        or croak "Submitting PIN failed.";
-
-    $response = $self->{ua}->get("$base/INGDirect/postlogin");
-    # XXX This is how it behaves in my browser, but not with
-    # LWP::UserAgent, so we can apparently just skip this step...
-    #$response->is_redirect && $response->header('location') =~ /account_summary.vm/
-    #    or croak "Post login redirect failed.";
-
-    #$response = $self->{ua}->get("$base/INGDirect/account_summary.vm");
-    # XXX ...and the postlogin screen has the account summary.
-    $response->is_success or croak "Account summary fetch failed.";
-    $self->{_account_screen} = $response->content;
+    $self->{ofx} = Finance::OFX->new(
+        userID => $self->{saver_id},
+        userPass => $self->{access_code},
+        Institution => $self->{fi},
+    );
 }
 
 =pod
@@ -153,37 +106,25 @@ Retrieve a list of accounts:
 sub accounts {
     my ($self) = @_;
 
-    my $te = HTML::TableExtract->new( 
-        attribs => { cellpadding => 0, cellspacing => 0 } 
-    );
-    my $account_screen = $self->{_account_screen};
-    $account_screen =~ s/&nbsp;/ /g; # &nbsp; makes TableExtract unhappy
-    $te->parse($account_screen);
+    my %accounts = map {
+        $_->{accttype} =~ s/(.)(.*)/\u$1\L$2/;
+        $_->{acctid} => {
+            type        => $_->{accttype},
+            number      => $_->{acctid},
+            nickname    => $_->{desc},
+        }
+    } $self->{ofx}->accounts;
 
-    my %accounts;
-    my $seen_header = 0;
-
-    $te->tables or croak "Can't extract accounts table.";
-
-    foreach my $row (($te->tables)[0]->rows) {
-      if ($row->[0] =~ /Account Type/) {
-        $seen_header++;
-        next;
-      }
-      next unless $seen_header;
-
-      foreach (@$row) {
-        s/^\s*//;  s/\s*$//; s/[\n\r]/ /g; s/\s+/ /g;
-      }
-
-      my %account;
-      ($account{type}, $account{nickname}) = split / - /, shift @$row;
-      ($account{number},
-       $account{balance},
-       $account{available}) = map { s/^.+:\s+//; s/,//g; $_ ; } @$row;
-      next unless $account{type}; # don't include total row
-      $accounts{$account{number}} = \%account
-        if $account{number};
+    for(keys %accounts) {
+        my $a = Finance::OFX::Account->new(
+            ID => $accounts{$_}{number},
+            Type => uc($accounts{$_}{type}),
+            FID => $self->{fi}->fid,
+        );
+        my $r = $self->{ofx}{ua}->statement($a, end => time, start => time, transactions => 0);
+        $r = $r->ofx->{bankmsgsrsv1}{stmttrnrs}{stmtrs};
+        $accounts{$_}{available} = $r->{availbal}{balamt};
+        $accounts{$_}{balance}   = $r->{ledgerbal}{balamt};
     }
 
     %accounts;
