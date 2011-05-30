@@ -156,7 +156,9 @@ sub recent_transactions {
         FID => $self->{fi}->fid,
     );
     my $r = $self->{ofx}{ua}->statement($a, end => $end, start => $start, transactions => 1);
-    my @txns = @{$r->ofx->{bankmsgsrsv1}{stmttrnrs}{stmtrs}{banktranlist}{stmttrn}};
+    my $txns = $r->ofx->{bankmsgsrsv1}{stmttrnrs}{stmtrs}{banktranlist}{stmttrn};
+    return unless $txns;
+    $txns = [ $txns ] if ref $txns eq 'HASH';
     map {
         $_->{amount} = sprintf('%.2f', $_->{trnamt});
         $_->{date} = DateTime->from_epoch(epoch => $_->{dtposted})->ymd('-');
@@ -164,7 +166,7 @@ sub recent_transactions {
         delete $_->{trntype};
         delete $_->{dtposted};
         $_
-    } @txns;
+    } @{$txns};
 }
 
 =pod
@@ -180,28 +182,29 @@ past to pretty far in the future).
 sub transactions {
     my ($self, $account, $from, $to) = @_;
 
-    $account ||= 'ALL';
     $from ||= '2000-01-01';
     $to ||= '2038-01-01';
 
-    my @from = strptime($from);
-    my @to = strptime($to);
+    my $end = str2time($to);
+    my $start = str2time($from);
 
-    $from[4]++;
-    $to[4]++;
-    $from[5] += 1900;
-    $to[5] += 1900;
-
-    my $response = $self->{ua}->post("$base/download.qfx", [
-        type => 'OFX',
-        TIMEFRAME => 'VARIABLE',
-        account => $account,
-        startDate => sprintf("%02d/%02d/%d", @from[4,3,5]),
-        endDate   => sprintf("%02d/%02d/%d", @to[4,3,5]),
-    ]);
-    $response->is_success or croak "OFX download failed.";
-
-    $response->content;
+    my $a = Finance::OFX::Account->new(
+        ID => $account,
+        Type => uc($self->{accounts}{$account}{type}),
+        FID => $self->{fi}->fid,
+    );
+    my $r = $self->{ofx}{ua}->statement($a, end => $end, start => $start, transactions => 1);
+    my $txns = $r->ofx->{bankmsgsrsv1}{stmttrnrs}{stmtrs}{banktranlist}{stmttrn};
+    return unless $txns;
+    $txns = [ $txns ] if ref $txns eq 'HASH';
+    map {
+        $_->{amount} = sprintf('%.2f', $_->{trnamt});
+        $_->{date} = DateTime->from_epoch(epoch => $_->{dtposted})->ymd('-');
+        delete $_->{trnamt};
+        delete $_->{trntype};
+        delete $_->{dtposted};
+        $_
+    } @{$txns};
 }
 
 1;
