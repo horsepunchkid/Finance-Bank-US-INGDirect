@@ -8,6 +8,7 @@ use Finance::OFX::Institution;
 use Finance::OFX::UserAgent;
 use Finance::OFX::Account;
 use Date::Parse;
+use DateTime;
 use Data::Dumper;
 
 =pod
@@ -127,6 +128,8 @@ sub accounts {
         $accounts{$_}{balance}   = $r->{ledgerbal}{balamt};
     }
 
+    $self->{accounts} = \%accounts;
+
     %accounts;
 }
 
@@ -135,25 +138,33 @@ sub accounts {
 =head2 recent_transactions( $account, $days )
 
 Retrieve a list of transactions in OFX format for the given account
-(default: all accounts) for the past number of days (default: 30).
+for the past number of days (default: 30).
 
 =cut
 
 sub recent_transactions {
     my ($self, $account, $days) = @_;
 
-    $account ||= 'ALL';
     $days ||= 30;
 
-    my $response = $self->{ua}->post("$base/download.qfx", [
-        type => 'OFX',
-        TIMEFRAME => 'STANDARD',
-        account => $account,
-        FREQ => $days,
-    ]);
-    $response->is_success or croak "OFX download failed.";
+    my $end = time;
+    my $start = time - $days*24*3600;
 
-    $response->content;
+    my $a = Finance::OFX::Account->new(
+        ID => $account,
+        Type => uc($self->{accounts}{$account}{type}),
+        FID => $self->{fi}->fid,
+    );
+    my $r = $self->{ofx}{ua}->statement($a, end => $end, start => $start, transactions => 1);
+    my @txns = @{$r->ofx->{bankmsgsrsv1}{stmttrnrs}{stmtrs}{banktranlist}{stmttrn}};
+    map {
+        $_->{amount} = sprintf('%.2f', $_->{trnamt});
+        $_->{date} = DateTime->from_epoch(epoch => $_->{dtposted})->ymd('-');
+        delete $_->{trnamt};
+        delete $_->{trntype};
+        delete $_->{dtposted};
+        $_
+    } @txns;
 }
 
 =pod
