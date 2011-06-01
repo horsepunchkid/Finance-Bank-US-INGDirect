@@ -28,29 +28,25 @@ our $VERSION = '0.08';
 =head1 SYNOPSIS
 
   use Finance::Bank::US::INGDirect;
-  use Finance::OFX::Parse::Simple;
 
   my $ing = Finance::Bank::US::INGDirect->new(
       saver_id => '...',
       access_code => '...',
   );
 
-  my $parser = Finance::OFX::Parse::Simple->new;
-  my @txs = @{$parser->parse_scalar($ing->recent_transactions)};
   my %accounts = $ing->accounts;
-
-  for (@txs) {
-      print "Account: $_->{account_id}\n";
-      printf "%s %-50s %8.2f\n", $_->{date}, $_->{name}, $_->{amount} for @{$_->{transactions}};
+  for (map { $accounts{$_} } keys %accounts) {
+      print "Account: $_->{number} ($_->{nickname})\n";
+      my @txns = $ing->recent_transactions($_->{number});
+      printf "%s %-50s %8.2f\n", $_->{date}, $_->{name}, $_->{amount} for @txns;
       print "\n";
   }
 
 =head1 DESCRIPTION
 
 This module provides methods to access data from US INGdirect accounts,
-including account balances and recent transactions in OFX format (see
-Finance::OFX and related modules). It also provides a method to transfer
-money from one account to another on a given date.
+including account balances and recent transactions via OFX (see
+Finance::OFX and related modules).
 
 =cut
 
@@ -58,10 +54,9 @@ money from one account to another on a given date.
 
 =head1 METHODS
 
-=head2 new( saver_id => '...', customer => '...', questions => {...}, pin => '...' )
+=head2 new( saver_id => '...', access_code => '...' )
 
 Return an object that can be used to retrieve account balances and statements.
-See SYNOPSIS for examples of challenge questions.
 
 =cut
 
@@ -135,8 +130,8 @@ sub accounts {
 
 =head2 recent_transactions( $account, $days )
 
-Retrieve a list of transactions in OFX format for the given account
-for the past number of days (default: 30).
+Retrieve a list of transactions in for the given account for the past
+number of days (default: 30). See C<transactions> for return format.
 
 =cut
 
@@ -155,9 +150,10 @@ sub recent_transactions {
 
 =head2 transactions( $account, $from, $to )
 
-Retrieve a list of transactions in OFX format for the given account
-(default: all accounts) in the given time frame (default: pretty far in the
-past to pretty far in the future).
+Retrieve a list of transactions for the given account (default: all
+accounts) in the given time frame (default: pretty far in the past to
+pretty far in the future). The list returned contains hashes with keys
+C<amount>, C<date>, C<name>, and C<fitid>.
 
 =cut
 
