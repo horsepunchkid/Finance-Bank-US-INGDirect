@@ -54,8 +54,6 @@ money from one account to another on a given date.
 
 =cut
 
-my $base = '';
-
 =pod
 
 =head1 METHODS
@@ -147,26 +145,10 @@ sub recent_transactions {
 
     $days ||= 30;
 
-    my $end = time;
-    my $start = time - $days*24*3600;
+    my $end = DateTime->today;
+    my $start = $end->clone->subtract(days => $days);
 
-    my $a = Finance::OFX::Account->new(
-        ID => $account,
-        Type => uc($self->{accounts}{$account}{type}),
-        FID => $self->{fi}->fid,
-    );
-    my $r = $self->{ofx}{ua}->statement($a, end => $end, start => $start, transactions => 1);
-    my $txns = $r->ofx->{bankmsgsrsv1}{stmttrnrs}{stmtrs}{banktranlist}{stmttrn};
-    return unless $txns;
-    $txns = [ $txns ] if ref $txns eq 'HASH';
-    map {
-        $_->{amount} = sprintf('%.2f', $_->{trnamt});
-        $_->{date} = DateTime->from_epoch(epoch => $_->{dtposted})->ymd('-');
-        delete $_->{trnamt};
-        delete $_->{trntype};
-        delete $_->{dtposted};
-        $_
-    } @{$txns};
+    $self->transactions($account, $start->ymd('-'), $end->ymd('-'));
 }
 
 =pod
